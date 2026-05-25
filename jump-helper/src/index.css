@@ -1,0 +1,160 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #0d1117;
+  --surface2: #161b22;
+  --surface3: #1c2333;
+  --surface4: #21262d;
+  --border: #30363d;
+  --accent: #00e5ff;
+  --accent-dim: #00b8d9;
+  --accent-muted: rgba(0, 229, 255, 0.1);
+  --amber: #f5a623;
+  --amber-muted: rgba(245, 166, 35, 0.12);
+  --success: #3fb950;
+  --danger: #f85149;
+  --muted: #8b949e;
+  --subtle: #6e7681;
+  --text: #e6edf3;
+  --text-dim: #c9d1d9;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', sans-serif;
+  height: 100%;
+  overflow: hidden;
+}
+
+#root {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Scrollable area */
+.scroll-area {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.scroll-area::-webkit-scrollbar {
+  width: 4px;
+}
+.scroll-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-area::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+/* Card */
+.card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+/* Stat value */
+.stat-val {
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 600;
+}
+
+/* Glow effect */
+.glow-accent {
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.25);
+}
+
+/* Pulse anim */
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.pulse-slow {
+  animation: pulse-slow 2s ease-in-out infinite;
+}
+
+/* Fade in */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-in {
+  animation: fadeIn 0.25s ease-out;
+}
+
+/* Tab nav underline */
+.tab-btn {
+  position: relative;
+  transition: color 0.2s;
+}
+.tab-btn.active {
+  color: var(--accent);
+}
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+}
+
+/* Feature bar */
+.feat-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+.feat-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+/* Medal colors */
+.medal-1 { color: #ffd700; }
+.medal-2 { color: #c0c0c0; }
+.medal-3 { color: #cd7f32; }
+
+/* Confidence badges */
+.badge-green { background: rgba(63,185,80,0.15); color: #3fb950; border: 1px solid rgba(63,185,80,0.3); }
+.badge-yellow { background: rgba(245,166,35,0.15); color: #f5a623; border: 1px solid rgba(245,166,35,0.3); }
+.badge-red { background: rgba(248,81,73,0.15); color: #f85149; border: 1px solid rgba(248,81,73,0.3); }
+
+/* Heatmap cell */
+.hm-cell {
+  width: 16px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--surface4);
+}
+
+/* Rank badge */
+.rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: 'IBM Plex Mono', monospace;
+}
