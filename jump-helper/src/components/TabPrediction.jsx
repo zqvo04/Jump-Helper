@@ -16,7 +16,7 @@ export default function TabPrediction({ history, weights, members }) {
   const activeMems = members.filter(m => m.is_active && !m.is_retired)
 
   const predictions = useMemo(() =>
-    computePredictions(target, isHoliday, history, activeMems, weights),
+    computePredictions(target, isHoliday, history, activeMems, weights, dynamicROT),
     [target, isHoliday, history, activeMems, weights]
   )
 

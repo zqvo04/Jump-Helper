@@ -15,11 +15,11 @@ export default function JumpMeter({ history, weights, members }) {
   const dayAfterHol = isHolidayDate(dayAfter)
 
   const predTomorrow = useMemo(() =>
-    computePredictions(tomorrow, tomorrowHol, history, activeMems, weights),
+    computePredictions(tomorrow, tomorrowHol, history, activeMems, weights, dynamicROT),
     [tomorrow, tomorrowHol, history, activeMems, weights]
   )
   const predDayAfter = useMemo(() =>
-    computePredictions(dayAfter, dayAfterHol, history, activeMems, weights),
+    computePredictions(dayAfter, dayAfterHol, history, activeMems, weights, dynamicROT),
     [dayAfter, dayAfterHol, history, activeMems, weights]
   )
 
