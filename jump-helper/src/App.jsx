@@ -161,7 +161,7 @@ export default function App() {
   if(error)   return <Err msg={error}/>
 
   const dynamicROT=getEffectiveROT(members)
-  const tabProps={history,weights,members,mlLog,saveEntry,addMember,toggleMemberActive,retireMember,resetWeights,setMemberType,setMemberOrder,swapROTOrder,setNonROT,dynamicROT}
+  const tabProps={history,weights,members,mlLog,saveEntry,addMember,toggleMemberActive,retireMember,resetWeights,setMemberType,setMemberOrder,swapROTOrder,setNonROT,dynamicROT,isDesktop}
   const today=getTodayStr()
   const todayHol=isHolidayDate(today)
   const goodCnt=members.filter(m=>m.is_active&&!m.is_retired&&m.member_type==='good').length
