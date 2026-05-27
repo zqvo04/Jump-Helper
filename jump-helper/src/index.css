@@ -238,7 +238,7 @@ input[type="date"].input { font-family: var(--mono); font-size: 14px; }
 /* ── Tab nav ────────────────────────── */
 .tab-nav {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   background: var(--s1);
   border-top: 1px solid var(--border);
   padding-bottom: env(safe-area-inset-bottom, 0);
@@ -253,7 +253,7 @@ input[type="date"].input { font-family: var(--mono); font-size: 14px; }
   border-top: 2px solid transparent;
   transition: color 0.15s;
   -webkit-tap-highlight-color: transparent;
-  min-height: 56px;
+  min-height: 52px;
 }
 .tab-item.active { color: var(--cyan); border-top-color: var(--cyan); }
 .tab-item .ti { font-size: 20px; line-height: 1; }

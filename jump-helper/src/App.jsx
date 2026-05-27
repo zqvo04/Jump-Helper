@@ -9,6 +9,7 @@ import TabMembers from './components/TabMembers'
 import TabAnalysis from './components/TabAnalysis'
 import TabStats from './components/TabStats'
 import TabElapsed from './components/TabElapsed'
+import TabMonthly from './components/TabMonthly'
 import JumpMeter from './components/JumpMeter'
 
 const TABS = [
@@ -18,6 +19,7 @@ const TABS = [
   { label:'멤버', icon:'👥' },
   { label:'분석', icon:'📊' },
   { label:'통계', icon:'📈' },
+  { label:'월별', icon:'🗓️' },
 ]
 
 export default function App() {
@@ -47,7 +49,7 @@ export default function App() {
           await supabase.from('duty_weights').update({ version:WEIGHTS_VERSION, ...INITIAL_WEIGHTS, updated_at:new Date().toISOString() }).eq('id',row.id)
           setWeights(INITIAL_WEIGHTS)
         } else {
-          setWeights({ elapsed:+row.elapsed, fairness:+row.fairness, recency:+row.recency, rot:+row.rot })
+          setWeights({ elapsed:+row.elapsed, fairness:+row.fairness, recency:+row.recency, rot:+row.rot, dow:+(row.dow??0.11) })
         }
       }
       await loadAll(); setLoading(false)
@@ -64,7 +66,7 @@ export default function App() {
     if (h.data) setHistory(h.data)
     if (m.data) setMembers(m.data)
     if (l.data) setMlLog(l.data)
-    if (w.data?.[0]) { const r=w.data[0]; setWeightsId(r.id); setWeights({elapsed:+r.elapsed,fairness:+r.fairness,recency:+r.recency,rot:+r.rot}) }
+    if (w.data?.[0]) { const r=w.data[0]; setWeightsId(r.id); setWeights({elapsed:+r.elapsed,fairness:+r.fairness,recency:+r.recency,rot:+r.rot,dow:+(r.dow??0.11)}) }
   }, [])
 
   const saveEntry = useCallback(async (date, person, isHoliday) => {
@@ -143,6 +145,7 @@ export default function App() {
           {activeTab===3 && <TabMembers {...tabProps} />}
           {activeTab===4 && <TabAnalysis {...tabProps} />}
           {activeTab===5 && <TabStats {...tabProps} />}
+          {activeTab===6 && <TabMonthly {...tabProps} />}
         </div>
       </main>
       <nav className="tab-nav">

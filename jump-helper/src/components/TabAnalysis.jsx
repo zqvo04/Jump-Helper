@@ -2,9 +2,9 @@ import { useMemo } from 'react'
 import { INITIAL_WEIGHTS } from '../lib/prediction'
 import { signStr } from '../lib/utils'
 
-const FK   = ['elapsed','fairness','recency','rot']
-const FL   = { elapsed:'경과비율', fairness:'공정성', recency:'최근역수', rot:'순번패턴' }
-const FC   = { elapsed:'#00c8e8', fairness:'#00c853', recency:'#f0a500', rot:'#b57bee' }
+const FK   = ['elapsed','fairness','recency','rot','dow']
+const FL   = { elapsed:'경과비율', fairness:'공정성', recency:'최근역수', rot:'순번패턴', dow:'요일패턴' }
+const FC   = { elapsed:'#00c8e8', fairness:'#00c853', recency:'#f0a500', rot:'#b57bee', dow:'#f472b6' }
 
 export default function TabAnalysis({ mlLog, weights, resetWeights }) {
   const accuracy = useMemo(() => {

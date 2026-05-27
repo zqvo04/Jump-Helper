@@ -7,131 +7,120 @@ export const ROT_ORDER = [
 ]
 
 export const NON_ROT_MEMBERS = ['이동원', '배성재']
-export const WEIGHTS_VERSION = 'v4.8'
-export const INITIAL_WEIGHTS = { elapsed: 0.2757, fairness: 0.4135, recency: 0.2608, rot: 0.0500 }
+export const WEIGHTS_VERSION  = 'v5.1'
+export const INITIAL_WEIGHTS  = { elapsed:0.22, fairness:0.40, recency:0.21, rot:0.03, dow:0.14 }
 
-// ROT circular distance from→to (1–16, never 0)
 function rotDist(from, to) {
   const n = ROT_ORDER.length
-  const fi = ROT_ORDER.indexOf(from)
-  const ti = ROT_ORDER.indexOf(to)
-  if (fi === -1 || ti === -1) return null
+  const fi = ROT_ORDER.indexOf(from), ti = ROT_ORDER.indexOf(to)
+  if (fi===-1||ti===-1) return null
   const d = (ti - fi + n) % n
   return d === 0 ? n : d
 }
 
-// Build normalized swap probability table from same-type history (sorted asc)
+// 최근성 가중 교환 테이블
+// 최근 기록일수록 가중치 1.0→3.0 선형 증가
 function buildSwapTable(sortedSameType) {
   if (sortedSameType.length < 8) return null
-
+  const n = sortedSameType.length
   const counts = {}
-  for (let i = 1; i < sortedSameType.length; i++) {
-    const prev = sortedSameType[i - 1].person
+
+  for (let i = 1; i < n; i++) {
+    const prev = sortedSameType[i-1].person
     const curr = sortedSameType[i].person
-    const pi = ROT_ORDER.indexOf(prev)
+    const pi   = ROT_ORDER.indexOf(prev)
     if (pi === -1) continue
     const expected = ROT_ORDER[(pi + 1) % ROT_ORDER.length]
     if (expected !== curr) {
+      // 최근일수록 높은 가중치 (1.0 ~ 3.0)
+      const w = 1 + (i / n) * 2
       if (!counts[expected]) counts[expected] = {}
-      counts[expected][curr] = (counts[expected][curr] || 0) + 1
+      counts[expected][curr] = (counts[expected][curr] || 0) + w
+
+      // 역방향도 절반 가중치로 기록
+      // (A가 B 자리를 가져갔다면, B도 A와 자주 교환하는 관계)
+      if (!counts[curr]) counts[curr] = {}
+      counts[curr][expected] = (counts[curr][expected] || 0) + w * 0.5
     }
   }
 
-  // Normalize per expected key
   const table = {}
   for (const [exp, map] of Object.entries(counts)) {
     const total = Object.values(map).reduce((a, b) => a + b, 0)
-    if (total === 0) continue
+    if (!total) continue
     table[exp] = {}
-    for (const [p, cnt] of Object.entries(map)) {
-      table[exp][p] = cnt / total
-    }
+    for (const [p, cnt] of Object.entries(map)) table[exp][p] = cnt / total
   }
   return table
 }
 
-/**
- * Compute ranked predictions for a given date.
- * @param {string} targetDate  ISO date string
- * @param {boolean} isHoliday
- * @param {Array}  history     All known records { date, person, is_holiday }
- * @param {Array}  activeMembers  Array of { name, is_active, is_retired }
- * @param {Object} weights    { elapsed, fairness, recency, rot }
- * @returns {Array} Sorted [{person, prob, score, features:{f1,f2,f3,f4}, elapsedDays}]
- */
 export function computePredictions(targetDate, isHoliday, history, activeMembers, weights) {
-  // Only history strictly before targetDate
-  const past = history.filter(h => h.date < targetDate)
-  const pastSorted = [...past].sort((a, b) => a.date.localeCompare(b.date))
-
-  const sameType = past.filter(h => h.is_holiday === isHoliday)
+  const past           = history.filter(h => h.date < targetDate)
+  const pastSorted     = [...past].sort((a, b) => a.date.localeCompare(b.date))
+  const sameType       = past.filter(h => h.is_holiday === isHoliday)
   const sameTypeSorted = [...sameType].sort((a, b) => a.date.localeCompare(b.date))
 
   const members = activeMembers.filter(m => m.is_active && !m.is_retired)
   const N = members.length
   if (N === 0) return []
 
-  const swapTable = buildSwapTable(sameTypeSorted)
-  const lastSameType = sameTypeSorted[sameTypeSorted.length - 1]
-  const prevPerson = lastSameType?.person ?? null
-  const prevPersonIdx = prevPerson ? ROT_ORDER.indexOf(prevPerson) : -1
+  const swapTable      = buildSwapTable(sameTypeSorted)
+  const lastSameType   = sameTypeSorted.at(-1)
+  const prevPerson     = lastSameType?.person ?? null
+  const prevPersonIdx  = prevPerson ? ROT_ORDER.indexOf(prevPerson) : -1
 
-  // ── F1: team avg elapsed (all types) ────────────────────────────────
-  let totalElapsed = 0; let elapsedN = 0
+  // ROT 예상 다음 사람 (교환 감지용)
+  const rotExpectedNext = prevPersonIdx !== -1
+    ? ROT_ORDER[(prevPersonIdx + 1) % ROT_ORDER.length]
+    : null
+
+  // F1: 팀 평균 경과일 (타입 무관)
+  let totalElapsed = 0, elapsedN = 0
   for (const m of members) {
     const last = findLast(pastSorted, h => h.person === m.name)
     if (last) { totalElapsed += dateDiffDays(last.date, targetDate); elapsedN++ }
   }
   const teamAvg = elapsedN > 0 ? totalElapsed / elapsedN : 30
 
-  // ── F2 denominators ─────────────────────────────────────────────────
-  const totalST = sameType.length
+  // F2: 같은 타입 공정성
+  const totalST        = sameType.length
   const expectedAssign = N > 0 ? totalST / N : 0
 
-  // ── F3: recent 21-day window ─────────────────────────────────────────
+  // F3: 최근 21일
   const cut21 = addDays(targetDate, -21)
-  const w21 = sameType.filter(h => h.date >= cut21 && h.date < targetDate)
+  const w21   = sameType.filter(h => h.date >= cut21 && h.date < targetDate)
   const exp21 = N > 0 ? w21.length / N : 0
+
+  // F5: 요일별 공정성 (같은 타입 + 같은 요일)
+  const targetDow = new Date(targetDate + 'T00:00:00').getDay()
+  const sameDow   = sameType.filter(h => new Date(h.date + 'T00:00:00').getDay() === targetDow)
+  const totalDow  = sameDow.length
+  const expDow    = totalDow > 0 ? totalDow / N : 0
 
   const results = members.map(m => {
     const name = m.name
 
     // F1 elapsed
     const lastAny = findLast(pastSorted, h => h.person === name)
-    let f1
-    if (!lastAny) {
-      f1 = 0.5
-    } else {
-      const elapsed = dateDiffDays(lastAny.date, targetDate)
-      f1 = Math.min(elapsed / teamAvg, 3) / 3
-    }
+    const f1 = !lastAny
+      ? 0.5
+      : Math.min(dateDiffDays(lastAny.date, targetDate) / teamAvg, 3) / 3
 
     // F2 fairness
-    let f2
-    if (expectedAssign < 0.001) {
-      f2 = 0.5
-    } else {
-      const actual = sameType.filter(h => h.person === name).length
-      f2 = clamp(0.5 + (expectedAssign - actual) / (2 * expectedAssign), 0, 1)
-    }
+    const f2 = expectedAssign < 0.001
+      ? 0.5
+      : clamp(0.5 + (expectedAssign - sameType.filter(h => h.person === name).length) / (2 * expectedAssign), 0, 1)
 
     // F3 recency
-    let f3
-    if (exp21 < 0.05) {
-      f3 = 1
-    } else {
-      const cnt21 = w21.filter(h => h.person === name).length
-      f3 = 1 / (1 + cnt21 / exp21)
-    }
+    const cnt21 = w21.filter(h => h.person === name).length
+    const f3    = exp21 < 0.05 ? 1 : 1 / (1 + cnt21 / exp21)
 
-    // F4 rot
+    // F4 rot + 교환 패턴
     let f4
     if (NON_ROT_MEMBERS.includes(name)) {
       f4 = 0.3
     } else if (prevPersonIdx === -1) {
-      // No previous same-type person or prev not in ROT → neutral
-      const myIdx = ROT_ORDER.indexOf(name)
-      f4 = myIdx !== -1 ? 0.4 : 0.3
+      f4 = ROT_ORDER.indexOf(name) !== -1 ? 0.4 : 0.3
     } else {
       const dist = rotDist(prevPerson, name)
       if (dist === null) {
@@ -139,45 +128,43 @@ export function computePredictions(targetDate, isHoliday, history, activeMembers
       } else {
         const base = Math.exp(-Math.pow(dist - 1, 2) / 72)
         let swapBonus = 0
-        if (swapTable) {
-          const expectedNext = ROT_ORDER[(prevPersonIdx + 1) % ROT_ORDER.length]
-          const swapsMap = swapTable[expectedNext]
-          if (swapsMap) {
-            swapBonus = (swapsMap[name] ?? 0) * 0.40
-          }
+        if (swapTable && rotExpectedNext) {
+          // 직전 ROT 예상자 기준 교환 확률
+          const swapsMap = swapTable[rotExpectedNext]
+          if (swapsMap) swapBonus = (swapsMap[name] ?? 0) * 0.40
         }
         f4 = Math.min(1.0, base + swapBonus)
       }
     }
 
-    const score =
-      weights.elapsed * f1 +
-      weights.fairness * f2 +
-      weights.recency * f3 +
-      weights.rot * f4
+    // F5 day-of-week fairness
+    let f5
+    if (totalDow < 3) {
+      f5 = 0.5  // 데이터 부족
+    } else {
+      const actualDow = sameDow.filter(h => h.person === name).length
+      f5 = clamp(0.5 + (expDow - actualDow) / (2 * Math.max(expDow, 0.1)), 0, 1)
+    }
 
+    const w = weights
+    const score = w.elapsed*f1 + w.fairness*f2 + w.recency*f3 + w.rot*f4 + (w.dow??0)*f5
     return {
-      person: name,
-      score,
-      features: { f1, f2, f3, f4 },
+      person: name, score,
+      features: { f1, f2, f3, f4, f5 },
       elapsedDays: lastAny ? dateDiffDays(lastAny.date, targetDate) : null,
     }
   })
 
-  // Softmax T=2.5 (multiplier in exponent)
   const maxScore = Math.max(...results.map(r => r.score))
-  const expVals = results.map(r => Math.exp((r.score - maxScore) * 2.5))
-  const sumExp = expVals.reduce((a, b) => a + b, 0)
+  const expVals  = results.map(r => Math.exp((r.score - maxScore) * 2.5))
+  const sumExp   = expVals.reduce((a, b) => a + b, 0)
 
   return results
     .map((r, i) => ({ ...r, prob: expVals[i] / sumExp }))
     .sort((a, b) => b.prob - a.prob)
 }
 
-/**
- * Apply online ML weight update given actual person and prediction list.
- * @returns {Object} newWeights
- */
+// ⑤ 확률 가중 기댓값으로 온라인 학습 개선
 export function applyMLUpdate(weights, actualPerson, predictions) {
   const actualPred = predictions.find(p => p.person === actualPerson)
   if (!actualPred) return weights
@@ -185,47 +172,40 @@ export function applyMLUpdate(weights, actualPerson, predictions) {
   const errorRate = 1 - actualPred.prob
   const lr = 0.010 * (1 + errorRate * 1.5)
 
-  // Reference: average feature values of top-3 predictions
-  const topK = predictions.slice(0, Math.min(3, predictions.length))
-  const topAvg = {
-    f1: topK.reduce((s, p) => s + p.features.f1, 0) / topK.length,
-    f2: topK.reduce((s, p) => s + p.features.f2, 0) / topK.length,
-    f3: topK.reduce((s, p) => s + p.features.f3, 0) / topK.length,
-    f4: topK.reduce((s, p) => s + p.features.f4, 0) / topK.length,
+  // Top3 평균 대신 전체 확률 가중 기댓값 사용
+  const expAvg = {
+    f1: predictions.reduce((s, p) => s + p.prob * p.features.f1, 0),
+    f2: predictions.reduce((s, p) => s + p.prob * p.features.f2, 0),
+    f3: predictions.reduce((s, p) => s + p.prob * p.features.f3, 0),
+    f4: predictions.reduce((s, p) => s + p.prob * p.features.f4, 0),
+    f5: predictions.reduce((s, p) => s + p.prob * (p.features.f5 ?? 0.5), 0),
   }
 
-  const steps = { elapsed: 0.30, fairness: 0.30, recency: 0.25, rot: 0.20 }
-  const featureKeys = [['elapsed', 'f1'], ['fairness', 'f2'], ['recency', 'f3'], ['rot', 'f4']]
+  const steps = { elapsed:0.30, fairness:0.30, recency:0.25, rot:0.20, dow:0.25 }
+  const featureMap = [
+    ['elapsed','f1'], ['fairness','f2'], ['recency','f3'], ['rot','f4'], ['dow','f5']
+  ]
   const af = actualPred.features
-
   const nw = { ...weights }
-  for (const [wk, fk] of featureKeys) {
-    const signal = af[fk] >= topAvg[fk]
-    if (signal) {
-      nw[wk] = Math.min(0.65, nw[wk] + lr * steps[wk])
-    } else {
-      nw[wk] = Math.max(0.03, nw[wk] - lr * steps[wk] * 0.75)
-    }
+
+  for (const [wk, fk] of featureMap) {
+    if (nw[wk] === undefined) continue
+    const signal = (af[fk] ?? 0.5) >= expAvg[fk]
+    if (signal) nw[wk] = Math.min(0.65, nw[wk] + lr * steps[wk])
+    else        nw[wk] = Math.max(0.03, nw[wk] - lr * steps[wk] * 0.75)
   }
 
-  // Normalize to sum=1
   const total = Object.values(nw).reduce((a, b) => a + b, 0)
   for (const k of Object.keys(nw)) nw[k] = nw[k] / total
 
   return nw
 }
 
-// ── helpers ──────────────────────────────────────────────────────────────────
-
-function findLast(sortedArr, predFn) {
-  for (let i = sortedArr.length - 1; i >= 0; i--) {
-    if (predFn(sortedArr[i])) return sortedArr[i]
-  }
+function findLast(arr, fn) {
+  for (let i = arr.length - 1; i >= 0; i--) if (fn(arr[i])) return arr[i]
   return null
 }
-
-function addDays(dateStr, days) {
-  const d = new Date(dateStr + 'T00:00:00')
-  d.setDate(d.getDate() + days)
+function addDays(s, n) {
+  const d = new Date(s + 'T00:00:00'); d.setDate(d.getDate() + n)
   return d.toISOString().split('T')[0]
 }
