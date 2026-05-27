@@ -165,7 +165,7 @@ export default function App() {
       )}
 
       {/* ── Sidebar ── */}
-      <aside className={`app-sidebar ${sideOpen?'':'closed'}`} style={{
+      <aside className={`app-sidebar ${sideOpen ? 'open' : 'closed'}`} style={{
         width:220,flexShrink:0,
         background:'linear-gradient(180deg,#C62828 0%,#8B0000 100%)',
         display:'flex',flexDirection:'column',overflow:'hidden',
