@@ -6,7 +6,7 @@ const F_LABELS = ['경과','공정','최근','순번','요일']
 const F_KEYS   = ['f1','f2','f3','f4','f5']
 const F_COLORS = ['#00c8e8','#00c853','#f0a500','#b57bee','#f472b6']
 
-export default function TabPrediction({ history, weights, members }) {
+export default function TabPrediction({ history, weights, members, dynamicROT }) {
   const today    = getTodayStr()
   const tomorrow = offsetDateStr(today, 1)
   const dayAfter = offsetDateStr(today, 2)

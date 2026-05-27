@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { computePredictions } from '../lib/prediction'
 import { isHolidayDate, getTodayStr, offsetDateStr, formatDateKo, pct } from '../lib/utils'
 
-export default function JumpMeter({ history, weights, members }) {
+export default function JumpMeter({ history, weights, members, dynamicROT }) {
   const today    = getTodayStr()
   const tomorrow = offsetDateStr(today, 1)
   const dayAfter = offsetDateStr(today, 2)
