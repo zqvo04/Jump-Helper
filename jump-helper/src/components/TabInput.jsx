@@ -63,7 +63,7 @@ export default function TabInput({ history, weights, members, saveEntry, dynamic
       {/* Person grid */}
       <div>
         <p className="sec-label" style={{marginBottom:10}}>담당자 선택 ({activeMems.length}명)</p>
-        <div style={{display:'grid',gridTemplateColumns:`repeat(${cols},1fr)`,gap:isDesktop?10:7}}>
+        <div className="person-grid">
           {activeMems.map(m=>{
             const pred=predMap[m.name], prob=pred?.prob??0
             const isTop=preds[0]?.person===m.name, isSel=selected===m.name

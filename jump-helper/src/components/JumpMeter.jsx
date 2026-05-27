@@ -24,7 +24,7 @@ export default function JumpMeter({ history, weights, members, dynamicROT, isDes
           <strong>멤버 관리</strong> 탭에서 <strong>좋은 사람</strong>을 지정하면 JUMP % 계산이 시작됩니다 ⭐
         </div>
       )}
-      <div style={{display:'grid',gridTemplateColumns:isDesktop?'1fr 1fr':'1fr',gap:14}}>
+      <div style={{className:'grid-2',style:{}}>
         <JumpCard label="내일" date={tomorrow} isHoliday={tomorrowHol} jumpPct={jumpTomorrow} goodMembers={goodMembers} predictions={predTomorrow} hasGood={hasGood} isDesktop={isDesktop}/>
         <JumpCard label="모레" date={dayAfter}  isHoliday={dayAfterHol} jumpPct={jumpDayAfter} goodMembers={goodMembers} predictions={predDayAfter} hasGood={hasGood} isDesktop={isDesktop}/>
       </div>

@@ -52,7 +52,7 @@ export default function TabPrediction({ history, weights, members, dynamicROT, i
       </div>
 
       {/* Top 3 */}
-      <div style={{display:'grid',gridTemplateColumns:isDesktop?'1fr 1fr 1fr':'1fr',gap:12}}>
+      <div className="grid-3">
         {preds.slice(0,3).map((pred,i)=><PredCard key={pred.person} pred={pred} rank={i+1} isDesktop={isDesktop}/>)}
       </div>
 
