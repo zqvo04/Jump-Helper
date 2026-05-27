@@ -15,113 +15,129 @@ function findBestROTOffset(recs, rotList) {
   return best
 }
 
-export default function TabMonthly({ history, members, dynamicROT, swapROTOrder, setMemberOrder }) {
+function isNonRot(m) {
+  return m.is_non_rot ?? NON_ROT_MEMBERS.includes(m.name)
+}
+
+export default function TabMonthly({ history, members, dynamicROT, swapROTOrder, setMemberOrder, setNonROT }) {
   const today = getTodayStr()
-  const [ym,      setYm]      = useState(today.slice(0,7))
+  const [ym, setYm] = useState(today.slice(0,7))
   const [section, setSection] = useState('calendar')
   const [year, month] = ym.split('-').map(Number)
-  const daysInMonth   = new Date(year, month, 0).getDate()
+  const daysInMonth = new Date(year, month, 0).getDate()
   const days = Array.from({length:daysInMonth},(_,i)=>`${ym}-${String(i+1).padStart(2,'0')}`)
-
   const effectiveROT = dynamicROT ?? []
 
   const rotSchedule = useMemo(()=>{
     const wdHist  = history.filter(h=>!h.is_holiday).sort((a,b)=>a.date.localeCompare(b.date))
     const holHist = history.filter(h=> h.is_holiday).sort((a,b)=>a.date.localeCompare(b.date))
-    const wdOff   = findBestROTOffset(wdHist,  effectiveROT)
-    const holOff  = findBestROTOffset(holHist, effectiveROT)
-    const sched   = {}
-    wdHist.forEach((h,i)  =>{ sched[h.date]={rotPerson:effectiveROT[(wdOff +i)%effectiveROT.length]??'—', actual:h.person, isHoliday:false} })
-    holHist.forEach((h,i) =>{ sched[h.date]={rotPerson:effectiveROT[(holOff+i)%effectiveROT.length]??'—', actual:h.person, isHoliday:true } })
+    if (!effectiveROT.length) return {}
+    const wdOff  = findBestROTOffset(wdHist,  effectiveROT)
+    const holOff = findBestROTOffset(holHist, effectiveROT)
+    const sched  = {}
+    wdHist.forEach((h,i)  =>{ sched[h.date]={rotPerson:effectiveROT[(wdOff +i)%effectiveROT.length],actual:h.person,isHoliday:false} })
+    holHist.forEach((h,i) =>{ sched[h.date]={rotPerson:effectiveROT[(holOff+i)%effectiveROT.length],actual:h.person,isHoliday:true } })
     let wdCnt=wdHist.length, holCnt=holHist.length
     const ref=new Date(ym+'-01T00:00:00')
     for(let i=0;i<62;i++){
-      const d=new Date(ref); d.setDate(d.getDate()+i)
+      const d=new Date(ref);d.setDate(d.getDate()+i)
       const ds=d.toISOString().split('T')[0]
       if(!sched[ds]){
         const hol=isHolidayDate(ds)
-        if(hol){sched[ds]={rotPerson:effectiveROT[(holOff+holCnt)%effectiveROT.length]??'—',actual:null,isHoliday:true};holCnt++}
-        else   {sched[ds]={rotPerson:effectiveROT[(wdOff +wdCnt )%effectiveROT.length]??'—',actual:null,isHoliday:false};wdCnt++}
+        if(hol){sched[ds]={rotPerson:effectiveROT[(holOff+holCnt)%effectiveROT.length],actual:null,isHoliday:true};holCnt++}
+        else   {sched[ds]={rotPerson:effectiveROT[(wdOff +wdCnt )%effectiveROT.length],actual:null,isHoliday:false};wdCnt++}
       }
     }
     return sched
-  },[history, ym, effectiveROT.join(',')])
+  },[history,ym,effectiveROT.join(',')])
 
-  const doneCount = days.filter(d=>rotSchedule[d]?.actual).length
-  const swapCount = days.filter(d=>{ const i=rotSchedule[d]; return i?.actual&&i.actual!==i.rotPerson }).length
+  const doneCount=days.filter(d=>rotSchedule[d]?.actual).length
+  const swapCount=days.filter(d=>{const i=rotSchedule[d];return i?.actual&&i.actual!==i.rotPerson}).length
 
   return (
-    <div style={{padding:'12px 14px',display:'flex',flexDirection:'column',gap:12}}>
+    <div style={{display:'flex',flexDirection:'column',gap:14}}>
+      {/* 월 네비 */}
       <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
         <button onClick={()=>{const d=new Date(year,month-2,1);setYm(d.toISOString().slice(0,7))}} className="btn btn-ghost" style={{width:40,height:40,padding:0,minHeight:40,fontSize:18}}>←</button>
         <div style={{textAlign:'center'}}>
-          <div style={{fontFamily:'var(--display)',fontWeight:800,fontSize:18,color:'var(--cyan)'}}>{year}년 {month}월</div>
+          <div style={{fontWeight:900,fontSize:18,color:'var(--text)'}}>{year}년 {month}월</div>
           {doneCount>0&&<div style={{fontFamily:'var(--mono)',fontSize:11,color:'var(--text3)',marginTop:2}}>교환 {swapCount}/{doneCount}건 ({Math.round(swapCount/doneCount*100)}%)</div>}
         </div>
         <button onClick={()=>{const d=new Date(year,month,1);setYm(d.toISOString().slice(0,7))}} className="btn btn-ghost" style={{width:40,height:40,padding:0,minHeight:40,fontSize:18}}>→</button>
       </div>
 
+      {/* 섹션 탭 */}
       <div style={{display:'flex',gap:6}}>
-        {[['calendar','📅 월별'],['rot','🔢 순번 관리']].map(([key,label])=>(
+        {[['calendar','📅 월별 일정'],['rot','🔢 순번 관리']].map(([key,label])=>(
           <button key={key} onClick={()=>setSection(key)} style={{
-            flex:1,height:38,borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer',
-            border:`1.5px solid ${section===key?'var(--cyan)':'var(--border)'}`,
-            background:section===key?'var(--cyan-mute)':'var(--s1)',
-            color:section===key?'var(--cyan)':'var(--text3)',
+            flex:1,height:40,borderRadius:10,fontSize:13,fontWeight:700,cursor:'pointer',
+            border:`1.5px solid ${section===key?'var(--red)':'var(--border)'}`,
+            background:section===key?'var(--red)':'var(--s1)',
+            color:section===key?'#FFF':'var(--text2)',
+            boxShadow:section===key?'0 3px 10px rgba(198,40,40,0.25)':'var(--shadow)',
           }}>{label}</button>
         ))}
       </div>
 
       {section==='calendar' && <CalendarView days={days} rotSchedule={rotSchedule} today={today}/>}
-      {section==='rot'      && <ROTView members={members} effectiveROT={effectiveROT} swapROTOrder={swapROTOrder} setMemberOrder={setMemberOrder}/>}
+      {section==='rot'      && <ROTView members={members} effectiveROT={effectiveROT} swapROTOrder={swapROTOrder} setMemberOrder={setMemberOrder} setNonROT={setNonROT}/>}
     </div>
   )
 }
 
 function CalendarView({days, rotSchedule, today}) {
   return (
-    <div style={{display:'flex',flexDirection:'column',gap:4}}>
-      <div style={{display:'flex',gap:10,fontSize:11,fontFamily:'var(--mono)',flexWrap:'wrap',marginBottom:4}}>
-        <span style={{color:'var(--cyan)'}}>◆ 오늘</span>
-        <span style={{color:'var(--amber)'}}>● 교환</span>
-        <span style={{color:'var(--text3)'}}>✓ 유지</span>
-        <span style={{color:'var(--text2)'}}>○ 예정</span>
+    <div className="card" style={{overflow:'hidden'}}>
+      {/* Legend */}
+      <div style={{display:'flex',gap:16,padding:'10px 14px',borderBottom:'1px solid var(--border)',fontSize:11,flexWrap:'wrap'}}>
+        <span style={{color:'var(--red)',fontWeight:700}}>◆ 오늘</span>
+        <span style={{color:'var(--amber)',fontWeight:700}}>● 교환발생</span>
+        <span style={{color:'var(--green)',fontWeight:700}}>✓ 순번유지</span>
+        <span style={{color:'var(--text3)',fontWeight:700}}>○ 예정</span>
       </div>
-      {days.map(date=>{
+      {days.map((date,idx)=>{
         const d=new Date(date+'T00:00:00'),dow=d.getDay()
         const info=rotSchedule[date]
         const isHol=info?.isHoliday??isHolidayDate(date)
         const isToday=date===today,isPast=date<today
         const rotP=info?.rotPerson??'—',actualP=info?.actual??null
         const isSwap=actualP&&actualP!==rotP
-        let bg='var(--s1)',borderColor='var(--border)',opacity=1
-        if(isToday){bg='rgba(0,212,232,0.08)';borderColor='var(--cyan)'}
-        else if(isPast&&isSwap){bg='rgba(240,165,0,0.05)';borderColor='rgba(240,165,0,0.25)';opacity=0.9}
-        else if(isPast){opacity=0.4}
         return (
-          <div key={date} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',borderRadius:8,background:bg,border:`1px solid ${borderColor}`,opacity,boxShadow:isToday?'0 0 0 2px rgba(0,212,232,0.15)':'none'}}>
-            <div style={{width:46,flexShrink:0}}>
-              <div style={{fontFamily:'var(--mono)',fontWeight:700,fontSize:13,color:isToday?'var(--cyan)':isPast?'var(--text3)':'var(--text)'}}>{date.slice(5).replace('-','/')}</div>
-              <div style={{fontSize:9,marginTop:1,display:'flex',gap:3}}>
-                <span style={{color:dow===0?'#f85149':dow===6?'#60a5fa':'var(--text3)'}}>{DAY_KO[dow]}</span>
-                {isHol&&<span style={{color:'var(--amber)'}}>휴</span>}
-                {isToday&&<span style={{color:'var(--cyan)',fontWeight:700}}>TODAY</span>}
+          <div key={date} style={{
+            display:'flex',alignItems:'center',gap:12,padding:'10px 14px',
+            background:isToday?'rgba(198,40,40,0.04)':isSwap&&isPast?'rgba(230,81,0,0.03)':'transparent',
+            borderBottom:idx<days.length-1?'1px solid var(--border)':'none',
+            opacity:isPast&&!isToday?0.6:1,
+            outline:isToday?'2px solid rgba(198,40,40,0.3)':'none',
+            outlineOffset:-1,
+          }}>
+            {/* Date */}
+            <div style={{width:50,flexShrink:0}}>
+              <div style={{fontFamily:'var(--mono)',fontWeight:700,fontSize:13,color:isToday?'var(--red)':isPast?'var(--text3)':'var(--text)'}}>
+                {date.slice(5).replace('-','/')}
+              </div>
+              <div style={{fontSize:10,marginTop:1,display:'flex',gap:3}}>
+                <span style={{color:dow===0?'var(--red)':dow===6?'#1565C0':'var(--text3)',fontWeight:700}}>{DAY_KO[dow]}</span>
+                {isHol&&<span style={{color:'var(--amber)',fontWeight:700}}>휴</span>}
+                {isToday&&<span style={{color:'var(--red)',fontWeight:900,fontSize:9}}>TODAY</span>}
               </div>
             </div>
+            {/* 기본순번 */}
             <div style={{flex:1}}>
-              <div style={{fontSize:10,color:'var(--text3)',marginBottom:1,fontFamily:'var(--mono)'}}>기본순번</div>
-              <div style={{fontWeight:600,fontSize:14,color:isPast&&!isToday?'var(--text3)':'var(--text)'}}>{rotP}</div>
+              <div style={{fontSize:10,color:'var(--text3)',marginBottom:2,fontWeight:700}}>기본순번</div>
+              <div style={{fontWeight:700,fontSize:14,color:isPast&&!isToday?'var(--text2)':'var(--text)'}}>{rotP}</div>
             </div>
-            <div style={{textAlign:'right',minWidth:72}}>
+            {/* 실제 */}
+            <div style={{textAlign:'right',minWidth:80}}>
               {actualP?(isSwap?(
                 <div>
-                  <div style={{fontSize:10,color:'var(--amber)',fontFamily:'var(--mono)',marginBottom:1}}>교환</div>
-                  <div style={{fontWeight:700,fontSize:14,color:'var(--amber)'}}>{actualP}</div>
+                  <div style={{fontSize:10,color:'var(--amber)',fontWeight:800,marginBottom:1}}>교환</div>
+                  <div style={{fontWeight:800,fontSize:14,color:'var(--amber)'}}>{actualP}</div>
                 </div>
               ):(
-                <div style={{display:'flex',alignItems:'center',gap:4,justifyContent:'flex-end'}}>
-                  <span style={{fontSize:11,color:'var(--green)'}}>✓</span>
-                  <span style={{fontSize:13,color:'var(--text3)'}}>{actualP}</span>
+                <div style={{display:'flex',alignItems:'center',gap:5,justifyContent:'flex-end'}}>
+                  <span style={{color:'var(--green)',fontWeight:900}}>✓</span>
+                  <span style={{fontSize:13,color:'var(--text2)',fontWeight:600}}>{actualP}</span>
                 </div>
               )):(
                 <span style={{fontSize:11,color:'var(--text3)',fontFamily:'var(--mono)'}}>예정</span>
@@ -134,153 +150,178 @@ function CalendarView({days, rotSchedule, today}) {
   )
 }
 
-function ROTView({members, effectiveROT, swapROTOrder, setMemberOrder}) {
-  const [editMode,  setEditMode]  = useState(false)
-  const [inserting, setInserting] = useState(null)
-  const [insertPos, setInsertPos] = useState(1)
+function ROTView({members, effectiveROT, swapROTOrder, setMemberOrder, setNonROT}) {
+  const [editMode, setEditMode] = useState(false)
+  const [confirmId, setConfirmId] = useState(null)
 
+  // ROT 멤버: is_non_rot = false 이거나 미설정이면서 활성
   const rotMembers = members
-    .filter(m=>m.is_active&&!m.is_retired&&!NON_ROT_MEMBERS.includes(m.name))
+    .filter(m => m.is_active && !m.is_retired && !isNonRot(m))
     .sort((a,b)=>(a.display_order??99)-(b.display_order??99))
 
-  const nonROTMembers = members.filter(m=>m.is_active&&!m.is_retired&&NON_ROT_MEMBERS.includes(m.name))
-
-  const newMembers = members.filter(m=>
-    m.is_active&&!m.is_retired&&!NON_ROT_MEMBERS.includes(m.name)&&
-    !['김찬혁','이상헌','박민서','김진영','모준찬','서희옥','김영훈','서동혁','허진혁','조영휘','김경은','장시은','이규현','이소연','강체리','박소영'].includes(m.name)
-  )
+  // 순번 외 멤버: is_non_rot = true
+  const nonRotMembers = members
+    .filter(m => m.is_active && !m.is_retired && isNonRot(m))
+    .sort((a,b)=>(a.display_order??99)-(b.display_order??99))
 
   async function moveUp(idx) {
     if(idx===0) return
-    const a=rotMembers[idx], b=rotMembers[idx-1]
-    await swapROTOrder(a.id, b.id)
+    await swapROTOrder(rotMembers[idx].id, rotMembers[idx-1].id)
   }
   async function moveDown(idx) {
     if(idx===rotMembers.length-1) return
-    const a=rotMembers[idx], b=rotMembers[idx+1]
-    await swapROTOrder(a.id, b.id)
+    await swapROTOrder(rotMembers[idx].id, rotMembers[idx+1].id)
   }
-  async function handleInsert(member) {
-    await setMemberOrder(member.id, insertPos)
-    setInserting(null)
+
+  // 순번 외로 이동 (ROT → 비ROT)
+  async function removeFromROT(id) {
+    if(confirmId!==id){setConfirmId(id);return}
+    await setNonROT(id, true)
+    setConfirmId(null)
+  }
+
+  // 순번에 편입 (비ROT → ROT 맨 뒤)
+  async function addToROT(id) {
+    await setNonROT(id, false)
   }
 
   return (
     <div style={{display:'flex',flexDirection:'column',gap:14}}>
 
-      {/* 편집 토글 */}
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-        <p className="sec-label">기본순번 ({effectiveROT.length}명)</p>
-        <button onClick={()=>setEditMode(v=>!v)} style={{
-          height:34,padding:'0 14px',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',
-          border:`1.5px solid ${editMode?'var(--amber)':'var(--border)'}`,
-          background:editMode?'var(--amber-mute)':'var(--s3)',
-          color:editMode?'var(--amber)':'var(--text3)',minHeight:34,
-        }}>
-          {editMode?'✓ 완료':'✏️ 순번 편집'}
-        </button>
-      </div>
+      {/* ── ROT 멤버 리스트 ── */}
+      <div>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+          <div>
+            <p className="sec-label">기본 순번 멤버</p>
+            <span style={{fontSize:12,color:'var(--text3)',marginTop:2,display:'block'}}>{rotMembers.length}명 · 순환 배정</span>
+          </div>
+          <button onClick={()=>{setEditMode(v=>!v);setConfirmId(null)}} style={{
+            height:36,padding:'0 14px',borderRadius:9,fontSize:12,fontWeight:700,cursor:'pointer',
+            border:`1.5px solid ${editMode?'var(--red)':'var(--border)'}`,
+            background:editMode?'var(--red)':'var(--s1)',
+            color:editMode?'#FFF':'var(--text2)',
+            minHeight:36,boxShadow:'var(--shadow)',
+          }}>
+            {editMode?'✓ 완료':'✏️ 순번 편집'}
+          </button>
+        </div>
 
-      {/* ROT 리스트 */}
-      <div className="card" style={{padding:8,display:'flex',flexDirection:'column',gap:3}}>
-        {rotMembers.map((m,i)=>{
-          const isNew=newMembers.some(n=>n.id===m.id)
-          return (
+        <div className="card" style={{overflow:'hidden'}}>
+          {rotMembers.map((m,i)=>(
             <div key={m.id} style={{
-              display:'flex',alignItems:'center',gap:10,
-              padding:'10px 12px',borderRadius:8,
-              background:isNew?'rgba(0,200,83,0.05)':i%2===0?'var(--s2)':'transparent',
-              border:`1px solid ${isNew?'rgba(0,200,83,0.2)':'transparent'}`,
+              display:'flex',alignItems:'center',gap:10,padding:'11px 14px',
+              background:i%2===0?'var(--s1)':'var(--s2)',
+              borderBottom:i<rotMembers.length-1?'1px solid var(--border)':'none',
             }}>
+              {/* 순번 번호 */}
               <div style={{
-                width:28,height:28,borderRadius:'50%',flexShrink:0,
-                background:isNew?'var(--green-mute)':'var(--s4)',
-                border:`1px solid ${isNew?'rgba(0,200,83,0.3)':'var(--border)'}`,
+                width:30,height:30,borderRadius:'50%',flexShrink:0,
+                background:'var(--red)',
                 display:'flex',alignItems:'center',justifyContent:'center',
-                fontFamily:'var(--mono)',fontSize:11,fontWeight:700,
-                color:isNew?'var(--green)':'var(--cyan)',
+                fontFamily:'var(--mono)',fontSize:12,fontWeight:700,color:'#FFF',
+                boxShadow:'0 2px 4px rgba(198,40,40,0.3)',
               }}>{i+1}</div>
-              <span style={{fontWeight:600,fontSize:15,flex:1,color:isNew?'var(--green)':'var(--text)'}}>{m.name}</span>
-              {isNew&&<span className="pill pill-green" style={{fontSize:10}}>NEW</span>}
+
+              <span style={{fontWeight:700,fontSize:15,flex:1,color:'var(--text)'}}>{m.name}</span>
+              {m.is_new&&<span className="pill pill-green" style={{fontSize:10}}>NEW</span>}
+
               {editMode&&(
-                <div style={{display:'flex',gap:4}}>
-                  <button onClick={()=>moveUp(i)} disabled={i===0}
-                    style={{width:32,height:32,borderRadius:6,border:'1px solid var(--border)',background:'var(--s4)',color:i===0?'var(--text3)':'var(--text)',cursor:i===0?'not-allowed':'pointer',fontSize:14,minHeight:32}}>↑</button>
-                  <button onClick={()=>moveDown(i)} disabled={i===rotMembers.length-1}
-                    style={{width:32,height:32,borderRadius:6,border:'1px solid var(--border)',background:'var(--s4)',color:i===rotMembers.length-1?'var(--text3)':'var(--text)',cursor:i===rotMembers.length-1?'not-allowed':'pointer',fontSize:14,minHeight:32}}>↓</button>
+                <div style={{display:'flex',gap:5,alignItems:'center'}}>
+                  {/* 위/아래 이동 */}
+                  <div style={{display:'flex',gap:3}}>
+                    <button onClick={()=>moveUp(i)} disabled={i===0} style={{
+                      width:30,height:30,borderRadius:7,border:'1.5px solid var(--border)',
+                      background:'var(--s1)',color:i===0?'var(--text3)':'var(--text)',
+                      cursor:i===0?'not-allowed':'pointer',fontSize:13,
+                      display:'flex',alignItems:'center',justifyContent:'center',
+                      boxShadow:'var(--shadow)',
+                    }}>↑</button>
+                    <button onClick={()=>moveDown(i)} disabled={i===rotMembers.length-1} style={{
+                      width:30,height:30,borderRadius:7,border:'1.5px solid var(--border)',
+                      background:'var(--s1)',color:i===rotMembers.length-1?'var(--text3)':'var(--text)',
+                      cursor:i===rotMembers.length-1?'not-allowed':'pointer',fontSize:13,
+                      display:'flex',alignItems:'center',justifyContent:'center',
+                      boxShadow:'var(--shadow)',
+                    }}>↓</button>
+                  </div>
+                  {/* 순번 제외 버튼 */}
+                  <button onClick={()=>removeFromROT(m.id)} style={{
+                    height:30,padding:'0 10px',borderRadius:7,fontSize:11,fontWeight:700,
+                    cursor:'pointer',border:'1.5px solid',minHeight:30,
+                    borderColor:confirmId===m.id?'var(--red)':'var(--border2)',
+                    background:confirmId===m.id?'var(--red)':'var(--s3)',
+                    color:confirmId===m.id?'#FFF':'var(--text3)',
+                  }}>
+                    {confirmId===m.id?'확인?':'순번 제외'}
+                  </button>
                 </div>
               )}
             </div>
-          )
-        })}
-        <div style={{marginTop:4,padding:'8px 12px',borderRadius:7,background:'var(--cyan-mute)',border:'1px solid rgba(0,212,232,0.2)',fontSize:12,color:'var(--cyan)',fontFamily:'var(--mono)',display:'flex',gap:6,alignItems:'center'}}>
-          <span>↺</span><span>{effectiveROT.at(-1)} → {effectiveROT[0]}</span>
+          ))}
+
+          {/* 순환 표시 */}
+          {rotMembers.length>0&&(
+            <div style={{padding:'10px 14px',background:'rgba(198,40,40,0.04)',borderTop:'1px solid var(--border)',fontSize:12,color:'var(--red)',fontFamily:'var(--mono)',fontWeight:700}}>
+              ↺ {rotMembers.at(-1)?.name} → {rotMembers[0]?.name} (순환)
+            </div>
+          )}
         </div>
       </div>
 
-      {/* 순번 외 */}
-      {nonROTMembers.length>0&&(
-        <div>
-          <p className="sec-label" style={{marginBottom:10}}>순번 외 멤버</p>
-          <div style={{display:'flex',flexDirection:'column',gap:5}}>
-            {nonROTMembers.map(m=>(
-              <div key={m.id} className="card" style={{padding:'10px 14px',display:'flex',alignItems:'center',gap:10}}>
-                <div style={{width:28,height:28,borderRadius:'50%',background:'var(--s4)',border:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,color:'var(--text3)',fontFamily:'var(--mono)'}}>—</div>
-                <span style={{fontWeight:500,fontSize:15}}>{m.name}</span>
-                <span style={{marginLeft:'auto',fontSize:11,color:'var(--text3)'}}>순번 외</span>
+      {/* ── 순번 외 멤버 ── */}
+      <div>
+        <div style={{marginBottom:10}}>
+          <p className="sec-label">순번 외 멤버</p>
+          <span style={{fontSize:12,color:'var(--text3)',marginTop:2,display:'block'}}>{nonRotMembers.length}명 · 순번에 편입 가능</span>
+        </div>
+
+        {nonRotMembers.length===0?(
+          <div className="card" style={{padding:'20px',textAlign:'center',color:'var(--text3)',fontSize:13}}>
+            순번 외 멤버가 없습니다
+          </div>
+        ):(
+          <div className="card" style={{overflow:'hidden'}}>
+            {nonRotMembers.map((m,i)=>(
+              <div key={m.id} style={{
+                display:'flex',alignItems:'center',gap:10,padding:'11px 14px',
+                background:i%2===0?'var(--s1)':'var(--s2)',
+                borderBottom:i<nonRotMembers.length-1?'1px solid var(--border)':'none',
+              }}>
+                <div style={{
+                  width:30,height:30,borderRadius:'50%',flexShrink:0,
+                  background:'var(--s4)',border:'1.5px solid var(--border2)',
+                  display:'flex',alignItems:'center',justifyContent:'center',
+                  fontSize:11,color:'var(--text3)',fontFamily:'var(--mono)',fontWeight:700,
+                }}>—</div>
+                <span style={{fontWeight:700,fontSize:15,flex:1,color:'var(--text)'}}>{m.name}</span>
+                {m.is_new&&<span className="pill pill-cyan" style={{fontSize:10}}>NEW</span>}
+                <span style={{fontSize:11,color:'var(--text3)',marginRight:4}}>순번 외</span>
+                {/* 순번 편입 버튼 */}
+                <button onClick={()=>addToROT(m.id)} style={{
+                  height:32,padding:'0 12px',borderRadius:8,fontSize:12,fontWeight:700,
+                  cursor:'pointer',border:'1.5px solid var(--green)',
+                  background:'rgba(46,125,50,0.08)',color:'var(--green)',
+                  minHeight:32,transition:'all 0.15s',
+                }}>
+                  + 순번 편입
+                </button>
               </div>
             ))}
           </div>
-        </div>
+        )}
+      </div>
+
+      {confirmId&&(
+        <button onClick={()=>setConfirmId(null)} className="btn btn-ghost" style={{width:'100%',fontSize:13}}>
+          취소
+        </button>
       )}
 
-      {/* 신규 멤버 배치 */}
-      {newMembers.length>0&&(
-        <div>
-          <p className="sec-label" style={{marginBottom:10}}>신규 멤버 순번 배치</p>
-          <div style={{display:'flex',flexDirection:'column',gap:8}}>
-            {newMembers.map(m=>(
-              <div key={m.id} className="card" style={{padding:12,border:`1px solid ${inserting===m.id?'var(--cyan)':'var(--border)'}`,background:inserting===m.id?'var(--cyan-mute)':'var(--s1)'}}>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:inserting===m.id?12:0}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8}}>
-                    <span className="pill pill-green" style={{fontSize:10}}>NEW</span>
-                    <span style={{fontWeight:600,fontSize:15}}>{m.name}</span>
-                    {m.display_order&&<span style={{fontSize:11,color:'var(--cyan)',fontFamily:'var(--mono)'}}>현재 {m.display_order}번</span>}
-                  </div>
-                  <button onClick={()=>{setInserting(inserting===m.id?null:m.id);setInsertPos(m.display_order||effectiveROT.length+1)}} style={{
-                    height:32,padding:'0 12px',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',minHeight:32,
-                    border:`1px solid ${inserting===m.id?'var(--cyan)':'var(--border)'}`,
-                    background:inserting===m.id?'var(--cyan)':'var(--s3)',
-                    color:inserting===m.id?'#000':'var(--text2)',
-                  }}>{inserting===m.id?'취소':'순번 지정'}</button>
-                </div>
-                {inserting===m.id&&(
-                  <div style={{display:'flex',flexDirection:'column',gap:10}}>
-                    <div style={{fontSize:12,color:'var(--text3)'}}>몇 번째에 배치할까요?</div>
-                    <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                      <button onClick={()=>setInsertPos(p=>Math.max(1,p-1))} className="btn btn-ghost" style={{width:44,height:44,padding:0,minHeight:44,fontSize:20}}>−</button>
-                      <div style={{flex:1,textAlign:'center',fontFamily:'var(--mono)',fontWeight:700,fontSize:22,color:'var(--cyan)',background:'var(--s3)',borderRadius:8,padding:'8px'}}>
-                        {insertPos}번
-                        <div style={{fontSize:11,fontWeight:400,color:'var(--text3)',marginTop:2}}>
-                          {rotMembers[insertPos-2]?`← ${rotMembers[insertPos-2].name}`:'맨 앞'} → {rotMembers[insertPos-1]?.name||'맨 끝'}
-                        </div>
-                      </div>
-                      <button onClick={()=>setInsertPos(p=>Math.min(effectiveROT.length+1,p+1))} className="btn btn-ghost" style={{width:44,height:44,padding:0,minHeight:44,fontSize:20}}>+</button>
-                    </div>
-                    <button onClick={()=>handleInsert(m)} className="btn btn-primary" style={{width:'100%',height:44}}>
-                      {m.name}을 {insertPos}번 순번으로 배치
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div style={{fontSize:11,color:'var(--text3)',lineHeight:1.7,padding:'8px 12px',background:'var(--s2)',borderRadius:8,border:'1px solid var(--border)'}}>
-        * ↑↓ 버튼으로 순번 조정 가능 (편집 모드)<br/>
-        * 변경 즉시 예측에도 반영됩니다
+      <div style={{fontSize:11,color:'var(--text3)',lineHeight:1.8,padding:'10px 14px',background:'var(--s1)',borderRadius:10,border:'1px solid var(--border)'}}>
+        <strong>순번 편집 모드</strong>에서:<br/>
+        • ↑↓ 버튼으로 순번 위치 조정<br/>
+        • <strong>순번 제외</strong>: 해당 멤버를 순번 외로 이동<br/>
+        • <strong>순번 편입</strong>: 순번 외 멤버를 순번 맨 뒤에 추가
       </div>
     </div>
   )
