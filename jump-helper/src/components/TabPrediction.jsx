@@ -140,7 +140,7 @@ export default function TabPrediction({ history, weights, members }) {
 function PredCard({ pred, rank }) {
   const medals = ['🥇','🥈','🥉']
   const { f1,f2,f3,f4 } = pred.features
-  const fVals = [f1,f2,f3,f4]
+  const fVals = F_KEYS.map(k => pred.features[k] ?? 0)
 
   return (
     <div className={`pred-card ${rank===1?'rank1':''} fade-up`} style={{ padding:14 }}>
