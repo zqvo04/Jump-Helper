@@ -7,8 +7,8 @@ export default function JumpMeter({ history, weights, members, dynamicROT }) {
   const tomorrow = offsetDateStr(today, 1)
   const dayAfter = offsetDateStr(today, 2)
 
-  const badMembers  = members.filter(m => m.member_type === 'bad'  && m.is_active && !m.is_retired)
-  const activeMems  = members.filter(m => m.is_active && !m.is_retired)
+  const badMembers = members.filter(m => m.member_type === 'bad'  && m.is_active && !m.is_retired)
+  const activeMems = members.filter(m => m.is_active && !m.is_retired)
   const tomorrowHol = isHolidayDate(tomorrow)
   const dayAfterHol = isHolidayDate(dayAfter)
 
@@ -21,14 +21,19 @@ export default function JumpMeter({ history, weights, members, dynamicROT }) {
     [dayAfter, dayAfterHol, history, activeMems, weights]
   )
 
-  // JUMP % = 1 - (나쁜 사람들의 예측 확률 합)
-  // 나쁜 사람이 없으면 null (미설정 상태)
+  // JUMP % 계산:
+  // 나쁜사람이 Top1이면 확률×2.0, Top2~3이면×1.5, Top4~5이면×1.1, 그 외×0.8
+  // jumpPct = 1 - 가중합산 (최소 0, 최대 1)
   const calcJump = (preds) => {
     if (badMembers.length === 0) return null
-    const badProb = badMembers.reduce((s, m) => {
-      return s + (preds.find(x => x.person === m.name)?.prob ?? 0)
+    const weighted = badMembers.reduce((s, m) => {
+      const pred = preds.find(x => x.person === m.name)
+      if (!pred) return s
+      const rank = preds.indexOf(pred) + 1
+      const w = rank === 1 ? 2.0 : rank <= 3 ? 1.5 : rank <= 5 ? 1.1 : 0.8
+      return s + pred.prob * w
     }, 0)
-    return Math.max(0, 1 - badProb)
+    return Math.max(0, 1 - Math.min(1, weighted))
   }
 
   const jumpTomorrow = calcJump(predTomorrow)
@@ -36,30 +41,22 @@ export default function JumpMeter({ history, weights, members, dynamicROT }) {
   const hasBad = badMembers.length > 0
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
+    <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
       {!hasBad && (
         <div style={{
-          padding: 16, borderRadius: 12,
-          background: 'rgba(232,160,0,0.08)', border: '1.5px solid rgba(232,160,0,0.2)',
-          fontSize: 13, color: 'var(--cyan-dim)', textAlign: 'center', lineHeight: 1.7,
+          padding:16, borderRadius:12,
+          background:'rgba(232,160,0,0.08)', border:'1.5px solid rgba(232,160,0,0.2)',
+          fontSize:13, color:'var(--cyan-dim)', textAlign:'center', lineHeight:1.7,
         }}>
           <strong>멤버 관리</strong> 탭에서 <strong>🍄 나쁜 사람</strong>을 지정하면<br/>
-          JUMP % 계산이 시작됩니다 (나쁜 사람이 배정될 확률의 역수)
+          JUMP % 계산이 시작됩니다
         </div>
       )}
-
       <div className="grid-2">
-        <JumpCard
-          label="내일" date={tomorrow} isHoliday={tomorrowHol}
-          jumpPct={jumpTomorrow} badMembers={badMembers}
-          predictions={predTomorrow} hasBad={hasBad}
-        />
-        <JumpCard
-          label="모레" date={dayAfter} isHoliday={dayAfterHol}
-          jumpPct={jumpDayAfter} badMembers={badMembers}
-          predictions={predDayAfter} hasBad={hasBad}
-        />
+        <JumpCard label="내일" date={tomorrow} isHoliday={tomorrowHol}
+          jumpPct={jumpTomorrow} badMembers={badMembers} predictions={predTomorrow} hasBad={hasBad}/>
+        <JumpCard label="모레" date={dayAfter}  isHoliday={dayAfterHol}
+          jumpPct={jumpDayAfter} badMembers={badMembers} predictions={predDayAfter} hasBad={hasBad}/>
       </div>
     </div>
   )
@@ -70,90 +67,92 @@ function JumpCard({ label, date, isHoliday, jumpPct, badMembers, predictions, ha
   const mood      = pct100 === null ? 'mid' : pct100 >= 60 ? 'high' : pct100 >= 30 ? 'mid' : 'low'
   const moodColor = mood === 'high' ? 'var(--green)' : mood === 'mid' ? 'var(--cyan-dim)' : 'var(--red)'
 
-  // 나쁜 사람별 개별 확률
-  const badProbs = badMembers.map(m => {
+  const badDetail = badMembers.map(m => {
     const pred = predictions.find(x => x.person === m.name)
-    return { name: m.name, prob: pred?.prob ?? 0, rank: predictions.findIndex(x => x.person === m.name) + 1 }
-  }).sort((a, b) => b.prob - a.prob)
+    const rank = pred ? predictions.indexOf(pred) + 1 : 99
+    const w    = rank === 1 ? 2.0 : rank <= 3 ? 1.5 : rank <= 5 ? 1.1 : 0.8
+    return { name: m.name, prob: pred?.prob ?? 0, rank, weight: w }
+  }).sort((a, b) => a.rank - b.rank)
 
-  const totalBadProb = badProbs.reduce((s, b) => s + b.prob, 0)
+  const totalBadProb = badDetail.reduce((s, b) => s + b.prob, 0)
 
   return (
     <div className="card" style={{
-      padding: 18, overflow: 'hidden', position: 'relative',
+      padding:18, overflow:'hidden', position:'relative',
       borderColor: hasBad && pct100 !== null ? `${moodColor}50` : 'var(--border)',
     }}>
       {hasBad && pct100 !== null && (
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg,${moodColor},transparent)` }}/>
+        <div style={{ position:'absolute', top:0, left:0, right:0, height:3,
+          background:`linear-gradient(90deg,${moodColor},transparent)` }}/>
       )}
 
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 }}>
         <div>
-          <div style={{ fontWeight: 900, fontSize: 18, color: 'var(--text)' }}>{label}</div>
-          <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+          <div style={{ fontWeight:900, fontSize:18, color:'var(--text)' }}>{label}</div>
+          <div style={{ fontFamily:'var(--mono)', fontSize:11, color:'var(--text3)', marginTop:2 }}>
             {formatDateKo(date)} · {isHoliday ? '휴일' : '평일'}
           </div>
         </div>
         <span style={{
-          padding: '5px 12px', borderRadius: 99, fontSize: 12, fontWeight: 800,
+          padding:'5px 12px', borderRadius:99, fontSize:12, fontWeight:800,
           background: isHoliday ? 'rgba(230,81,0,0.09)' : 'rgba(46,125,50,0.09)',
           color: isHoliday ? 'var(--amber)' : 'var(--green)',
-          border: `1.5px solid ${isHoliday ? 'rgba(230,81,0,0.2)' : 'rgba(46,125,50,0.2)'}`,
+          border:`1.5px solid ${isHoliday ? 'rgba(230,81,0,0.2)' : 'rgba(46,125,50,0.2)'}`,
         }}>{isHoliday ? '🌙 휴일' : '☀️ 평일'}</span>
       </div>
 
       {/* Character + % */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 16 }}>
+      <div style={{ display:'flex', alignItems:'center', gap:20, marginBottom:16 }}>
         <JumpCharacter mood={hasBad ? mood : 'mid'} />
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4, fontWeight: 700 }}>JUMP %</div>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:11, color:'var(--text3)', marginBottom:4, fontWeight:700 }}>JUMP %</div>
           <div style={{
-            fontFamily: 'var(--mono)', fontWeight: 900, fontSize: 52, lineHeight: 1,
+            fontFamily:'var(--mono)', fontWeight:900, fontSize:52, lineHeight:1,
             color: hasBad && pct100 !== null ? moodColor : 'var(--text3)',
           }}>
             {hasBad && pct100 !== null ? pct100 : '—'}
-            {hasBad && pct100 !== null && <span style={{ fontSize: 22, fontWeight: 600 }}>%</span>}
+            {hasBad && pct100 !== null && <span style={{ fontSize:22, fontWeight:600 }}>%</span>}
           </div>
-
           {hasBad && pct100 !== null && (
-            <div style={{ marginTop: 10, height: 8, background: 'var(--s3)', borderRadius: 4, overflow: 'hidden' }}>
+            <div style={{ marginTop:10, height:8, background:'var(--s3)', borderRadius:4, overflow:'hidden' }}>
               <div style={{
-                height: '100%', borderRadius: 4, width: `${pct100}%`,
-                background: moodColor, transition: 'width 0.8s cubic-bezier(.4,0,.2,1)',
-                boxShadow: `0 0 10px ${moodColor}60`,
+                height:'100%', borderRadius:4, width:`${pct100}%`,
+                background: moodColor,
+                transition:'width 0.8s cubic-bezier(.4,0,.2,1)',
+                boxShadow:`0 0 10px ${moodColor}60`,
               }}/>
             </div>
           )}
-
-          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>
-            {hasBad
-              ? `나쁜 사람 위험도 ${pct(totalBadProb)} 역산`
-              : '나쁜 사람을 지정해주세요'}
+          <div style={{ fontSize:11, color:'var(--text3)', marginTop:6 }}>
+            {hasBad ? `나쁜 사람 위험도 ${pct(totalBadProb)} (순위 가중)` : '나쁜 사람을 지정해주세요'}
           </div>
         </div>
       </div>
 
-      {/* 나쁜 사람별 위험 확률 */}
-      {hasBad && badProbs.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 700, marginBottom: 2 }}>🍄 나쁜 사람 배정 위험도</div>
-          {badProbs.map(b => {
-            const danger = b.prob >= 0.2 ? 'var(--red)' : b.prob >= 0.1 ? 'var(--amber)' : 'var(--green)'
+      {/* 나쁜 사람 상세 */}
+      {hasBad && badDetail.length > 0 && (
+        <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+          <div style={{ fontSize:11, color:'var(--text3)', fontWeight:700, marginBottom:2 }}>
+            🍄 나쁜 사람 배정 위험도
+          </div>
+          {badDetail.map(b => {
+            const dangerColor = b.rank === 1 ? 'var(--red)' : b.rank <= 3 ? 'var(--amber)' : 'var(--green)'
+            const rankLabel   = b.rank === 1 ? '🔴 1위' : b.rank <= 3 ? '🟠 '+b.rank+'위' : b.rank <= 5 ? '🟡 '+b.rank+'위' : b.rank+'위'
             return (
               <div key={b.name} style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '9px 12px', borderRadius: 10,
-                background: b.prob >= 0.15 ? 'rgba(198,40,40,0.05)' : 'var(--s2)',
-                border: `1.5px solid ${b.prob >= 0.15 ? 'rgba(198,40,40,0.2)' : 'var(--border)'}`,
+                display:'flex', alignItems:'center', gap:10,
+                padding:'9px 12px', borderRadius:10,
+                background: b.rank <= 3 ? `${dangerColor}08` : 'var(--s2)',
+                border:`1.5px solid ${b.rank <= 3 ? dangerColor+'30' : 'var(--border)'}`,
               }}>
-                <span style={{ fontSize: 14 }}>🍄</span>
-                <span style={{ fontWeight: 700, fontSize: 14, flex: 1 }}>{b.name}</span>
-                <span style={{
-                  fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text3)',
-                  background: 'var(--s3)', padding: '2px 8px', borderRadius: 6,
-                }}>{b.rank}위</span>
-                <span style={{ fontFamily: 'var(--mono)', fontWeight: 800, fontSize: 15, color: danger }}>
+                <span style={{ fontSize:14 }}>🍄</span>
+                <span style={{ fontWeight:700, fontSize:14, flex:1 }}>{b.name}</span>
+                <span style={{ fontSize:11, color:'var(--text3)', fontFamily:'var(--mono)' }}>
+                  ×{b.weight.toFixed(1)}
+                </span>
+                <span style={{ fontSize:12, fontWeight:700, color:dangerColor }}>{rankLabel}</span>
+                <span style={{ fontFamily:'var(--mono)', fontWeight:800, fontSize:15, color:dangerColor }}>
                   {pct(b.prob)}
                 </span>
               </div>
@@ -167,7 +166,7 @@ function JumpCard({ label, date, isHoliday, jumpPct, badMembers, predictions, ha
 
 function JumpCharacter({ mood }) {
   return (
-    <div style={{ width: 90, height: 90, flexShrink: 0 }}>
+    <div style={{ width:90, height:90, flexShrink:0 }}>
       {mood === 'high' && <CharHigh />}
       {mood === 'mid'  && <CharMid  />}
       {mood === 'low'  && <CharLow  />}
